@@ -12,45 +12,44 @@ import logging
 import os
 app = func.FunctionApp()
 
-@app.route(route="extract", auth_level=func.AuthLevel.ANONYMOUS)
-def extract(req: func.HttpRequest) -> func.HttpResponse:
+
+@app.route(route="process_document", auth_level=func.AuthLevel.ANONYMOUS, methods=['POST'])
+def process_document(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('Python HTTP trigger function processed a request.')
+
     try:
+        # Get the raw body as bytes
         file_bytes = req.get_body()
+
+        # Check if the request body is empty
         if not file_bytes:
             return func.HttpResponse("Request body is empty", status_code=400)
 
+        # Read the Word document from the binary data
         doc = Document(io.BytesIO(file_bytes))
-        extracted_data = extract_data_from_controls(doc)
-        logging.info(f"Extracted data: {extracted_data}")
 
-        return func.HttpResponse("Document processed successfully", status_code=200)
+        # Process the Word document for control data extraction
+        control_data = extract_data_from_controls(doc)
+        logging.info(f"Control Data: {control_data}")
+
+        # Process the Word document for track changes extraction
+        track_changes_data = extract_data_with_track_changes(doc)
+        logging.info(f"Track Changes Data: {track_changes_data}")
+
+        # Combine both results
+        combined_result = {
+            "Entity Extracts": control_data,
+            "Tracked Changes": track_changes_data
+        }
+
+        # Return the combined result
+        return func.HttpResponse(json.dumps(combined_result), mimetype="application/json", status_code=200)
 
     except Exception as e:
         logging.error("Exception type: " + str(type(e)))
         logging.error("Error processing request: " + str(e))
         logging.error("Traceback: " + traceback.format_exc())
         return func.HttpResponse("Error processing request: " + str(e), status_code=500)
-
-@app.route(route="track_changes", methods=['POST'])
-def track_changes(req: func.HttpRequest) -> func.HttpResponse:
-    try:
-        file_bytes = req.get_body()
-        if not file_bytes:
-            return func.HttpResponse("Request body is empty", status_code=400)
-
-        doc = Document(io.BytesIO(file_bytes))
-        extracted_data = extract_data_with_track_changes(doc)
-        logging.info(f"Extracted data: {extracted_data}")
-
-        return func.HttpResponse("Document processed successfully", status_code=200)
-
-    except Exception as e:
-        logging.error("Exception type: " + str(type(e)))
-        logging.error("Error processing request: " + str(e))
-        logging.error("Traceback: " + traceback.format_exc())
-        return func.HttpResponse("Error processing request: " + str(e), status_code=500)
-
-
 def extract_data_from_controls(doc):
     data = {}
     for part in doc.element.body.iter():
